@@ -29,11 +29,11 @@ def fetch_latest_data():
 # 🔁 Fetch and inspect data
 df = fetch_latest_data()
 
-# 🔎 Show what the API returned (TEMPORARY debug line)
+# 🔎 Show what the API returned
 st.write("First few rows from API:", df.head())
 st.write("Available columns:", df.columns)
 
-# ✅ Check for correct timestamp column
+# ✅ Dynamically find correct pickup time column
 pickup_col = None
 for col in ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime"]:
     if col in df.columns:
@@ -50,19 +50,8 @@ df = df.dropna(subset=[pickup_col])
 df["hour"] = df[pickup_col].dt.floor("H")
 hourly = df.groupby("hour").size().reset_index(name="ride_count")
 
-
-if df.empty or "pickup_datetime" not in df.columns:
-    st.error("🚨 No valid data from API.")
-    st.stop()
-
-# 🧹 Clean and aggregate
-df["pickup_datetime"] = pd.to_datetime(df["pickup_datetime"], errors="coerce")
-df = df.dropna(subset=["pickup_datetime"])
-df["hour"] = df["pickup_datetime"].dt.floor("H")
-hourly = df.groupby("hour").size().reset_index(name="ride_count")
-
 if hourly.shape[0] < 4:
-    st.warning("Not enough data to analyze. Try again later.")
+    st.warning("⚠️ Not enough data to analyze. Try again later.")
     st.stop()
 
 # 🧠 Predict anomalies
@@ -71,10 +60,8 @@ hourly["anomaly"] = model.predict(hourly[["ride_count"]])
 # 📊 Plot
 fig, ax = plt.subplots()
 ax.plot(hourly["hour"], hourly["ride_count"], label="Ride Count", color="royalblue")
-
 anomalies = hourly[hourly["anomaly"] == -1]
 ax.scatter(anomalies["hour"], anomalies["ride_count"], color="red", label="Anomaly")
-
 ax.set_title("NYC Taxi Ride Demand - Last 6 Hours")
 ax.set_xlabel("Time")
 ax.set_ylabel("Ride Count")
