@@ -2,71 +2,70 @@ import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
-import time
+import requests
+from datetime import datetime, timedelta
 
-# 🎨 Page config
-st.set_page_config(page_title="NYC Ride Demand Anomalies", layout="wide")
+st.set_page_config(page_title="NYC Real-Time Taxi Anomalies", layout="wide")
 
-# 📚 Sidebar info
-st.sidebar.title("📊 Project Info")
+# Sidebar info
+st.sidebar.title("📊 Real-Time Ride Demand")
 st.sidebar.markdown("""
-**NYC Ride Demand Anomaly Detection**  
-Built by *Ananya Kapoor*  
-Live simulation of hourly taxi rides in NYC, with real-time anomaly detection using Isolation Forest.
+Live anomaly detection on NYC taxi data via public API.
 
-- Model: Isolation Forest  
-- Data: Historical ride demand  
-- Purpose: Spot unusual demand (e.g., strikes, weather spikes)
+- 🔄 Refreshes latest hour
+- 🧠 ML Model: Isolation Forest
+- 📍 Source: NYC OpenData API
 """)
 
-# 🧠 Load model and data
+# Load model
 model = joblib.load("ride_anomaly_model.pkl")
-df = pd.read_csv("labeled_ride_counts.csv")
 
-df["hour"] = pd.to_datetime(df["hour"])
-df = df.sort_values("hour").reset_index(drop=True)
+# Function to fetch data from NYC TLC API
+@st.cache_data(ttl=3600)
+def fetch_latest_ride_data():
+    now = datetime.utcnow()
+    last_hour = now - timedelta(hours=1)
+    url = "https://data.cityofnewyork.us/resource/2yzn-sicd.json"
+    params = {
+        "$where": f"pickup_datetime between '{last_hour.strftime('%Y-%m-%dT%H:%M:%S')}' and '{now.strftime('%Y-%m-%dT%H:%M:%S')}'",
+        "$limit": 50000
+    }
+    response = requests.get(url, params=params)
+    data = response.json()
+    df = pd.DataFrame(data)
+    return df
 
-# 🔄 Simulation state
-ride_counts = []
-timestamps = []
-anomaly_points = []
+# Get and process data
+df = fetch_latest_ride_data()
 
-# 🎯 Main title
-st.markdown("<h1 style='text-align: center; color: white;'>🚦 NYC Ride Demand - Live Anomaly Detection</h1>", unsafe_allow_html=True)
-st.markdown("---")
+if df.empty or "pickup_datetime" not in df.columns:
+    st.error("🚨 No ride data retrieved for the past hour. Please try again later.")
+else:
+    df["pickup_datetime"] = pd.to_datetime(df["pickup_datetime"])
+    df["hour"] = df["pickup_datetime"].dt.floor("H")
+    hourly_counts = df.groupby("hour").size().reset_index(name="ride_count")
+    hourly_counts = hourly_counts.sort_values("hour").reset_index(drop=True)
 
-chart_area = st.empty()
-status_box = st.empty()
+    # Detect anomalies
+    hourly_counts["anomaly"] = model.predict(hourly_counts[["ride_count"]])
 
-# 🌀 Streaming loop
-for i in range(len(df)):
-    ts = df.loc[i, "hour"]
-    rc = df.loc[i, "ride_count"]
-
-    timestamps.append(ts)
-    ride_counts.append(rc)
-
-    pred = model.predict([[rc]])
-    if pred[0] == -1:
-        anomaly_points.append((ts, rc))
-
-    # 📈 Plot
+    # Plot
     fig, ax = plt.subplots()
-    ax.plot(timestamps, ride_counts, color='skyblue', label='Ride Count')
-    if anomaly_points:
-        x, y = zip(*anomaly_points)
-        ax.scatter(x, y, color='red', label='Anomaly', zorder=5)
-    ax.set_xlabel("Time")
+    ax.plot(hourly_counts["hour"], hourly_counts["ride_count"], label="Ride Count", color="skyblue")
+
+    anomalies = hourly_counts[hourly_counts["anomaly"] == -1]
+    if not anomalies.empty:
+        ax.scatter(anomalies["hour"], anomalies["ride_count"], color="red", label="Anomaly")
+
+    ax.set_xlabel("Hour")
     ax.set_ylabel("Ride Count")
-    ax.set_title("📈 Ride Demand Over Time")
+    ax.set_title("NYC Taxi Ride Count - Real-Time Anomaly Detection")
     ax.legend()
+    st.pyplot(fig)
 
-    chart_area.pyplot(fig)
-
-    # ✅ / 🔴 Status display
-    if pred[0] == -1:
-        status_box.error(f"🔴 {ts} | Ride Count: {rc} → Anomaly Detected!")
+    # Show status for last timestamp
+    latest = hourly_counts.iloc[-1]
+    if latest["anomaly"] == -1:
+        st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly Detected")
     else:
-        status_box.success(f"✅ {ts} | Ride Count: {rc} → Normal")
-
-    time.sleep(0.5)
+        st.success(f"✅ {latest['hour']} | Ride Count: {latest['ride_count']} → Normal")
