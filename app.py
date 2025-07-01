@@ -50,4 +50,31 @@ df["hour"] = df[timestamp_col].dt.floor("H")
 
 hourly = df.groupby("hour").size().reset_index(name="ride_count")
 
-if hou
+if hourly.shape[0] < 4:
+    st.warning("⚠️ Not enough data to analyze. Try again later.")
+    st.stop()
+
+# Anomaly prediction
+hourly["anomaly"] = model.predict(hourly[["ride_count"]])
+
+# Plot
+fig, ax = plt.subplots()
+ax.plot(hourly["hour"], hourly["ride_count"], label="Ride Count", color="blue")
+ax.scatter(
+    hourly[hourly["anomaly"] == -1]["hour"],
+    hourly[hourly["anomaly"] == -1]["ride_count"],
+    color="red", label="Anomaly"
+)
+ax.set_title("NYC Taxi Ride Count - Last 6 Hours")
+ax.set_xlabel("Hour")
+ax.set_ylabel("Number of Rides")
+ax.legend()
+st.pyplot(fig)
+
+# Current status
+latest = hourly.iloc[-1]
+if latest["anomaly"] == -1:
+    st.error(f"🔴 {latest['hour']} | {latest['ride_count']} rides → Anomaly")
+else:
+    st.success(f"✅ {latest['hour']} | {latest['ride_count']} rides → Normal")
+
