@@ -28,6 +28,12 @@ def fetch_latest_data():
 # Step 1: Fetch and inspect
 df = fetch_latest_data()
 
+# 🛠 Debug block
+if df.empty:
+    st.error("❌ API returned no data.")
+    st.stop()
+
+
 # Step 2: Detect the correct timestamp column
 POSSIBLE_COLS = ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime", "timestamp", "trip_pickup_datetime"]
 pickup_col = next((col for col in POSSIBLE_COLS if col in df.columns), None)
