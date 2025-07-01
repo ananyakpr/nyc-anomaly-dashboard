@@ -13,7 +13,6 @@ st.caption("Live from NYC OpenData API • Powered by Isolation Forest")
 # Load trained model
 model = joblib.load("ride_anomaly_model.pkl")
 
-# Cache API data to reduce memory and avoid refetching
 @st.cache_data(ttl=3600)
 def fetch_latest_data():
     now = datetime.utcnow()
@@ -26,44 +25,33 @@ def fetch_latest_data():
     response = requests.get(url, params=params)
     return pd.DataFrame(response.json())
 
-# Fetch and inspect
+# Step 1: Fetch and inspect
 df = fetch_latest_data()
 
-# Show available columns for debugging
-st.subheader("📦 Columns Returned from API:")
-st.write(df.columns.tolist())
+# Step 2: Detect the correct timestamp column
+POSSIBLE_COLS = ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime", "timestamp", "trip_pickup_datetime"]
+pickup_col = next((col for col in POSSIBLE_COLS if col in df.columns), None)
 
-st.subheader("🧪 Sample API Data:")
-st.dataframe(df.head())
-
-# Dynamically detect timestamp column
-POSSIBLE_TIME_COLS = ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime", "timestamp", "trip_pickup_datetime"]
-pickup_col = None
-for col in POSSIBLE_TIME_COLS:
-    if col in df.columns:
-        pickup_col = col
-        break
-
-# If not found, stop with error
-if not pickup_col:
-    st.error("❌ Could not detect a valid timestamp column from the API.")
+if pickup_col is None:
+    st.error("❌ Could not detect timestamp column in API data.")
+    st.write("🔍 Columns available:", df.columns.tolist())
     st.stop()
 
-# Clean timestamp
+# Step 3: Clean and process
 df[pickup_col] = pd.to_datetime(df[pickup_col], errors="coerce")
 df = df.dropna(subset=[pickup_col])
 df["hour"] = df[pickup_col].dt.floor("H")
 hourly = df.groupby("hour").size().reset_index(name="ride_count")
 
-# If not enough data, stop
 if hourly.shape[0] < 4:
-    st.warning("⚠️ Not enough data to analyze. Try again later.")
+    st.warning("⚠️ Not enough recent data to detect anomalies. Please check again later.")
+    st.dataframe(df.head())
     st.stop()
 
-# Predict anomalies
+# Step 4: Predict
 hourly["anomaly"] = model.predict(hourly[["ride_count"]])
 
-# Plotting
+# Step 5: Plot
 fig, ax = plt.subplots()
 ax.plot(hourly["hour"], hourly["ride_count"], label="Ride Count", color="royalblue")
 anomalies = hourly[hourly["anomaly"] == -1]
@@ -74,9 +62,9 @@ ax.set_ylabel("Ride Count")
 ax.legend()
 st.pyplot(fig)
 
-# Current status
+# Step 6: Status
 latest = hourly.iloc[-1]
 if latest["anomaly"] == -1:
-    st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly")
+    st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly Detected")
 else:
     st.success(f"✅ {latest['hour']} | Ride Count: {latest['ride_count']} → Normal")
