@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 import joblib
 import time
 
-# Set dark mode styling
+# Page config
 st.set_page_config(page_title="NYC Ride Anomaly Stream", layout="wide")
 st.markdown("<h1 style='color: white;'>🚦 NYC Ride Demand - Real-Time Anomaly Detection</h1>", unsafe_allow_html=True)
 st.markdown("Live simulation of ride demand anomalies using Isolation Forest model.")
@@ -13,22 +13,22 @@ st.markdown("Live simulation of ride demand anomalies using Isolation Forest mod
 model = joblib.load("ride_anomaly_model.pkl")
 df = pd.read_csv("labeled_ride_counts.csv")
 
-# Preprocess
-df["timestamp"] = pd.to_datetime(df["timestamp"])
-df = df.sort_values("timestamp").reset_index(drop=True)
+# ✅ Use the correct datetime column
+df["hour"] = pd.to_datetime(df["hour"])
+df = df.sort_values("hour").reset_index(drop=True)
 
 # Streamlit placeholders
 chart_area = st.empty()
 status_area = st.empty()
 
-# Initialize
+# Lists to store stream values
 ride_counts = []
 timestamps = []
 anomaly_points = []
 
-# Simulate stream
+# Simulate streaming
 for i in range(len(df)):
-    ts = df.loc[i, "timestamp"]
+    ts = df.loc[i, "hour"]
     rc = df.loc[i, "ride_count"]
 
     timestamps.append(ts)
