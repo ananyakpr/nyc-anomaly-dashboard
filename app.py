@@ -32,6 +32,10 @@ def fetch_data():
 
 df = fetch_data()
 
+st.subheader("🧾 Columns returned from NYC API:")
+st.write(df.columns.tolist())
+
+
 # Detect timestamp column
 timestamp_col = None
 for col in ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime"]:
