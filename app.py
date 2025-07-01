@@ -4,29 +4,41 @@ import matplotlib.pyplot as plt
 import joblib
 import time
 
-# Page config
-st.set_page_config(page_title="NYC Ride Anomaly Stream", layout="wide")
-st.markdown("<h1 style='color: white;'>🚦 NYC Ride Demand - Real-Time Anomaly Detection</h1>", unsafe_allow_html=True)
-st.markdown("Live simulation of ride demand anomalies using Isolation Forest model.")
+# 🎨 Page config
+st.set_page_config(page_title="NYC Ride Demand Anomalies", layout="wide")
 
-# Load model and data
+# 📚 Sidebar info
+st.sidebar.title("📊 Project Info")
+st.sidebar.markdown("""
+**NYC Ride Demand Anomaly Detection**  
+Built by *Ananya Kapoor*  
+Live simulation of hourly taxi rides in NYC, with real-time anomaly detection using Isolation Forest.
+
+- Model: Isolation Forest  
+- Data: Historical ride demand  
+- Purpose: Spot unusual demand (e.g., strikes, weather spikes)
+""")
+
+# 🧠 Load model and data
 model = joblib.load("ride_anomaly_model.pkl")
 df = pd.read_csv("labeled_ride_counts.csv")
 
-# ✅ Use the correct datetime column
 df["hour"] = pd.to_datetime(df["hour"])
 df = df.sort_values("hour").reset_index(drop=True)
 
-# Streamlit placeholders
-chart_area = st.empty()
-status_area = st.empty()
-
-# Lists to store stream values
+# 🔄 Simulation state
 ride_counts = []
 timestamps = []
 anomaly_points = []
 
-# Simulate streaming
+# 🎯 Main title
+st.markdown("<h1 style='text-align: center; color: white;'>🚦 NYC Ride Demand - Live Anomaly Detection</h1>", unsafe_allow_html=True)
+st.markdown("---")
+
+chart_area = st.empty()
+status_box = st.empty()
+
+# 🌀 Streaming loop
 for i in range(len(df)):
     ts = df.loc[i, "hour"]
     rc = df.loc[i, "ride_count"]
@@ -34,23 +46,27 @@ for i in range(len(df)):
     timestamps.append(ts)
     ride_counts.append(rc)
 
-    # Predict anomaly
     pred = model.predict([[rc]])
     if pred[0] == -1:
         anomaly_points.append((ts, rc))
 
-    # Plot
+    # 📈 Plot
     fig, ax = plt.subplots()
-    ax.plot(timestamps, ride_counts, color='blue', label='Ride Count')
+    ax.plot(timestamps, ride_counts, color='skyblue', label='Ride Count')
     if anomaly_points:
         x, y = zip(*anomaly_points)
-        ax.scatter(x, y, color='red', label='Anomaly')
-    ax.set_xlabel("Hour")
+        ax.scatter(x, y, color='red', label='Anomaly', zorder=5)
+    ax.set_xlabel("Time")
     ax.set_ylabel("Ride Count")
-    ax.set_title("Live Ride Demand with Anomalies")
+    ax.set_title("📈 Ride Demand Over Time")
     ax.legend()
 
     chart_area.pyplot(fig)
-    status_area.info(f"🕐 {ts} | 🚕 Ride Count: {rc} | {'🔴 Anomaly' if pred[0] == -1 else '✅ Normal'}")
+
+    # ✅ / 🔴 Status display
+    if pred[0] == -1:
+        status_box.error(f"🔴 {ts} | Ride Count: {rc} → Anomaly Detected!")
+    else:
+        status_box.success(f"✅ {ts} | Ride Count: {rc} → Normal")
 
     time.sleep(0.5)
