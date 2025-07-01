@@ -26,8 +26,30 @@ def fetch_latest_data():
     response = requests.get(url, params=params)
     return pd.DataFrame(response.json())
 
-# 🔁 Fetch and preprocess
+# 🔁 Fetch and inspect data
 df = fetch_latest_data()
+
+# 🔎 Show what the API returned (TEMPORARY debug line)
+st.write("First few rows from API:", df.head())
+st.write("Available columns:", df.columns)
+
+# ✅ Check for correct timestamp column
+pickup_col = None
+for col in ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime"]:
+    if col in df.columns:
+        pickup_col = col
+        break
+
+if not pickup_col:
+    st.error("🚨 Could not find pickup time column in API data.")
+    st.stop()
+
+# 🧹 Clean and group
+df[pickup_col] = pd.to_datetime(df[pickup_col], errors="coerce")
+df = df.dropna(subset=[pickup_col])
+df["hour"] = df[pickup_col].dt.floor("H")
+hourly = df.groupby("hour").size().reset_index(name="ride_count")
+
 
 if df.empty or "pickup_datetime" not in df.columns:
     st.error("🚨 No valid data from API.")
