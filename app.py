@@ -1,84 +1,68 @@
 # app.py
+
 import streamlit as st
 import pandas as pd
 import matplotlib.pyplot as plt
 import joblib
-import requests
+import random
 from datetime import datetime, timedelta
 
-st.set_page_config(page_title="NYC Taxi Anomaly Detector", layout="wide")
-st.title("🚖 NYC Real-Time Ride Anomaly Detector")
-st.caption("Live from NYC OpenData • Powered by Isolation Forest")
+st.set_page_config(page_title="NYC Ride Anomalies", layout="wide")
 
-# Load model
+st.title("🚖 NYC Simulated Ride Anomaly Detector")
+st.caption("Simulated ride data • Powered by Isolation Forest")
+
+# Load trained model
 model = joblib.load("ride_anomaly_model.pkl")
 
-# NYC Open Data API (Yellow Taxi Trip Data)
-NYC_API = "https://data.cityofnewyork.us/resource/2yzn-sicd.json"
-
-@st.cache_data(ttl=3600)
-def fetch_data():
+# Step A: Generate simulated ride data
+@st.cache_data(ttl=600)
+def simulate_ride_data():
     now = datetime.utcnow()
-    past = now - timedelta(hours=6)
-    
-    params = {
-        "$where": f"pickup_datetime between '{past.strftime('%Y-%m-%dT%H:%M:%S')}' and '{now.strftime('%Y-%m-%dT%H:%M:%S')}'",
-        "$limit": 5000
-    }
+    data = []
 
-    response = requests.get(NYC_API, params=params)
-    df = pd.DataFrame(response.json())
-    return df
+    for i in range(6):
+        hour = now - timedelta(hours=5 - i)
+        ride_count = random.randint(11000, 17000)
 
-df = fetch_data()
+        # Inject anomaly with 10% probability
+        if random.random() < 0.15:
+            ride_count = random.choice([random.randint(3000, 4000), random.randint(22000, 25000)])
 
-st.subheader("🧾 Columns returned from NYC API:")
-st.write(df.columns.tolist())
+        data.append({
+            "hour": hour,
+            "ride_count": ride_count
+        })
 
+    return pd.DataFrame(data)
 
-# Detect timestamp column
-timestamp_col = None
-for col in ["pickup_datetime", "tpep_pickup_datetime", "lpep_pickup_datetime"]:
-    if col in df.columns:
-        timestamp_col = col
-        break
+# Get simulated data
+df = simulate_ride_data()
 
-if not timestamp_col:
-    st.error("❌ No pickup time column found in API response.")
-    st.stop()
+# Step B: Predict anomalies
+df["anomaly"] = model.predict(df[["ride_count"]])
 
-# Preprocessing
-df[timestamp_col] = pd.to_datetime(df[timestamp_col], errors="coerce")
-df = df.dropna(subset=[timestamp_col])
-df["hour"] = df[timestamp_col].dt.floor("H")
-
-hourly = df.groupby("hour").size().reset_index(name="ride_count")
-
-if hourly.shape[0] < 4:
-    st.warning("⚠️ Not enough data to analyze. Try again later.")
-    st.stop()
-
-# Anomaly prediction
-hourly["anomaly"] = model.predict(hourly[["ride_count"]])
-
-# Plot
+# Step C: Plot results
 fig, ax = plt.subplots()
-ax.plot(hourly["hour"], hourly["ride_count"], label="Ride Count", color="blue")
-ax.scatter(
-    hourly[hourly["anomaly"] == -1]["hour"],
-    hourly[hourly["anomaly"] == -1]["ride_count"],
-    color="red", label="Anomaly"
-)
-ax.set_title("NYC Taxi Ride Count - Last 6 Hours")
-ax.set_xlabel("Hour")
-ax.set_ylabel("Number of Rides")
+ax.plot(df["hour"], df["ride_count"], label="Ride Count", color="royalblue")
+
+# Highlight anomalies
+anomalies = df[df["anomaly"] == -1]
+ax.scatter(anomalies["hour"], anomalies["ride_count"], color="red", label="Anomaly")
+
+ax.set_title("Simulated NYC Taxi Ride Demand - Last 6 Hours")
+ax.set_xlabel("Time")
+ax.set_ylabel("Ride Count")
 ax.legend()
 st.pyplot(fig)
 
-# Current status
-latest = hourly.iloc[-1]
+# Step D: Display result of latest hour
+latest = df.iloc[-1]
 if latest["anomaly"] == -1:
-    st.error(f"🔴 {latest['hour']} | {latest['ride_count']} rides → Anomaly")
+    st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly")
 else:
-    st.success(f"✅ {latest['hour']} | {latest['ride_count']} rides → Normal")
+    st.success(f"✅ {latest['hour']} | Ride Count: {latest['ride_count']} → Normal")
 
+# Optional: Show full data
+with st.expander("See full simulated dataset"):
+    st.dataframe(df)
