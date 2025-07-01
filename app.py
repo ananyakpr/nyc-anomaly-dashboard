@@ -62,14 +62,26 @@ for _ in range(100):  # runs for 100 cycles, you can increase it
         ax.legend()
         st.pyplot(fig)
 
-        latest = df.iloc[-1]
-        if latest["anomaly"] == -1:
-            st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly")
-        else:
-            st.success(f"✅ {latest['hour']} | Ride Count: {latest['ride_count']} → Normal")
+    latest = df.iloc[-1]
+    
+    if latest["anomaly"] == -1:
+        # Show red alert box
+        st.error(f"🔴 {latest['hour']} | Ride Count: {latest['ride_count']} → Anomaly")
 
-        with st.expander("📊 Raw Stream Data"):
-            st.dataframe(df.reset_index(drop=True))
+        # Play sound using JavaScript
+        st.markdown("""
+            <script>
+                var audio = new Audio('https://www.soundjay.com/buttons/sounds/beep-07a.mp3');
+                audio.play();
+            </script>
+        """, unsafe_allow_html=True)
+
+    else:
+        st.success(f"✅ {latest['hour']} | Ride Count: {latest['ride_count']} → Normal")
+
+
+    with st.expander("📊 Raw Stream Data"):
+                st.dataframe(df.reset_index(drop=True))
 
     time.sleep(5)
     st.rerun()
